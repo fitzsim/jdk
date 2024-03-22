@@ -213,8 +213,11 @@ define SetupJarArchiveBody
             | $(SED) 's|$$(src)/|-C $$(src) |g' >> \
         $$($1_BIN)/_the.$$($1_JARNAME)_contents) $$(NEWLINE) )
   endif
+  # Remove unsorted jar_contents files after sorting; their internal ordering is
+  # non-deterministic, so they show up as noise in reproducibility comparisons.
   $1_SUPDATE_CONTENTS=\
       $(SORT) $$($1_BIN)/_the.$$($1_JARNAME)_contents > $$($1_BIN)/_the.$$($1_JARNAME)_contents_sorted && \
+      $(RM) $$($1_BIN)/_the.$$($1_JARNAME)_contents && \
       $$($1_JAR_CMD) --update $$($1_JAR_OPTIONS) --file $$@ @$$($1_BIN)/_the.$$($1_JARNAME)_contents_sorted $$(NEWLINE)
 
   # Use a slightly shorter name for logging, but with enough path to identify this jar.
