@@ -28,3 +28,20 @@ jdk dir:
 
 Currently, there is no necessary changes in sleef files to make it work for jdk.
 * previous issues are resolved by https://github.com/shibatch/sleef/pull/537, https://github.com/shibatch/sleef/pull/536
+
+### step 5: overwrite the files under the sleef directory with updated versions
+src/jdk.incubator.vector/linux/native/sleef contains a subset of the
+SLEEF source files: OpenJDK-local copies of the sources required to
+regenerate the headers used by libvectorpath.  These are for use by
+OpenJDK maintainers who prefer to use OpenJDK's own repository files and
+build machinery to generate the headers.
+
+### step 6: make sure everything is committed
+
+### step 7: make regenerate-sleef-headers
+
+### step 8: run `git status` to see if checked-in headers stayed identical
+If any of the checked-in headers (sleefinline_sve.h,
+sleefinline_advsimd.h) changed, please update the SetupSleefIntermediate
+calls in make/modules/jdk.incubator.vector/SleefCommon.gmk to match what
+CMake does, until the generated headers are identical.
