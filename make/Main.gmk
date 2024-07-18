@@ -845,6 +845,11 @@ ifeq ($(JCOV_ENABLED), true)
   ))
 endif
 
+$(eval $(call SetupTarget, regenerate-sleef-headers, \
+    MAKEFILE := modules/jdk.incubator.vector/Sleef, \
+    TARGET := regenerate-sleef-headers, \
+))
+
 ################################################################################
 #
 # Dependency declarations between targets.
