@@ -24,6 +24,7 @@
 #
 
 include LibCommon.gmk
+include SleefCommon.gmk
 
 ################################################################################
 ## Build libjsvml
@@ -39,6 +40,10 @@ ifeq ($(call isTargetOs, linux windows)+$(call isTargetCpu, x86_64)+$(INCLUDE_CO
 endif
 
 ifeq ($(call isTargetOs, linux)+$(call isTargetCpu, aarch64)+$(INCLUDE_COMPILER2), true+true+true)
+  ifeq ($(REGENERATE_SLEEF_HEADERS), true)
+    TARGETS += $(SLEEF_TARGETS)
+  endif
+
   $(eval $(call SetupJdkLibrary, BUILD_LIBVECTORMATH, \
       NAME := vectormath, \
       DISABLED_WARNINGS_gcc := unused-function, \

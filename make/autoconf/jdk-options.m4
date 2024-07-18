@@ -196,8 +196,11 @@ AC_DEFUN_ONCE([JDKOPT_SETUP_JDK_OPTIONS],
   # The only platform having this problem at the moment is Linux on aarch64, which may encounter
   # three different page sizes: 4K, 64K, and if run on Mac m1 hardware, 16K.
   COMPATIBLE_CDS_ALIGNMENT_DEFAULT=false
+  # SLEEF headers are only used on aarch64 so far.
+  REGENERATE_SLEEF_HEADERS_AVAILABLE=false
   if test "x$OPENJDK_TARGET_OS" = "xlinux" && test "x$OPENJDK_TARGET_CPU" = "xaarch64"; then
     COMPATIBLE_CDS_ALIGNMENT_DEFAULT=auto
+    REGENERATE_SLEEF_HEADERS_AVAILABLE=true
   fi
 
   # Compress jars
@@ -695,6 +698,30 @@ AC_DEFUN([JDKOPT_ENABLE_DISABLE_COMPATIBLE_CDS_ALIGNMENT],
         fi
       ])
   AC_SUBST(ENABLE_COMPATIBLE_CDS_ALIGNMENT)
+])
+
+################################################################################
+#
+# Regeneration of SLEEF headers
+#
+AC_DEFUN([JDKOPT_ENABLE_DISABLE_REGENERATE_SLEEF_HEADERS],
+[
+  UTIL_ARG_ENABLE(NAME: regenerate-sleef-headers, DEFAULT: false,
+      RESULT: REGENERATE_SLEEF_HEADERS,
+      DESC: [enable regeneration of SLEEF headers],
+      DEFAULT_DESC: [disabled],
+      CHECKING_MSG: [if regeneration of SLEEF headers enabled],
+      CHECK_AVAILABLE: [
+        AC_MSG_CHECKING([if SLEEF headers are used on this platform])
+        if test "x$REGENERATE_SLEEF_HEADERS_AVAILABLE" = "xfalse"; then
+          AVAILABLE=false
+          AC_MSG_RESULT([no (SLEEF headers are not used)])
+        else
+          AVAILABLE=true
+          AC_MSG_RESULT([yes])
+        fi
+      ])
+  AC_SUBST(REGENERATE_SLEEF_HEADERS)
 ])
 
 ################################################################################
