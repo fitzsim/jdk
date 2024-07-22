@@ -65,6 +65,20 @@ define SetupSleefIntermediateBody
     .PHONY: $$(SLEEF_BUILD_$1)
   endif
 endef
+
+SetupSleefOverwrite = $(NamedParamsMacroTemplate)
+define SetupSleefOverwriteBody
+  $$(eval $$(call SetupExecute, SLEEF_OVERWRITE_$1, \
+      DEPS :=  $$(SLEEF_BLD)/$1, \
+      COMMAND := $$(CAT) $$(SLEEF_BLD)/$1 > $$(VECTORMATH_SRC)/$1, \
+      SUPPORT_DIR := $$(SLEEF_BLD), \
+      OUTPUT_FILE := $$(VECTORMATH_SRC)/$1))
+  SLEEF_TARGETS += $$(SLEEF_OVERWRITE_$1)
+  ifeq ($(SLEEF_PHONY), true)
+    .PHONY: $$(SLEEF_OVERWRITE_$1)
+  endif
+endef
+
 # sleefinline_sve.h
 $(eval $(call SetupSleefIntermediate, renamesve.h, \
     BLD_DEPS := mkrename, \
@@ -116,6 +130,8 @@ $(eval $(call SetupSleefIntermediate, sleefinline_sve.h, \
                                       $(SLEEF_SRC)/common/keywords.txt \
                                       _sve_sleef \
                                       Sleef_rempitabdp Sleef_rempitabsp))
+$(eval $(call SetupSleefOverwrite, sleefinline_sve.h))
+
 # sleefinline_advsimd.h
 $(eval $(call SetupSleefIntermediate, renameadvsimd.h, \
     BLD_DEPS := mkrename, \
@@ -165,18 +181,4 @@ $(eval $(call SetupSleefIntermediate, sleefinline_advsimd.h, \
                                       $(SLEEF_SRC)/common/keywords.txt \
                                       _advsimd_sleef \
                                       Sleef_rempitabdp Sleef_rempitabsp))
-
-SetupSleefOverwrite = $(NamedParamsMacroTemplate)
-define SetupSleefOverwriteBody
-  $$(eval $$(call SetupExecute, SLEEF_OVERWRITE_$1, \
-      DEPS :=  $$(SLEEF_BLD)/$1, \
-      COMMAND := $$(CAT) $$(SLEEF_BLD)/$1 > $$(VECTORMATH_SRC)/$1, \
-      SUPPORT_DIR := $$(SLEEF_BLD), \
-      OUTPUT_FILE := $$(VECTORMATH_SRC)/$1))
-  SLEEF_TARGETS += $$(SLEEF_OVERWRITE_$1)
-  ifeq ($(SLEEF_PHONY), true)
-    .PHONY: $$(SLEEF_OVERWRITE_$1)
-  endif
-endef
-$(eval $(call SetupSleefOverwrite, sleefinline_sve.h))
 $(eval $(call SetupSleefOverwrite, sleefinline_advsimd.h))
