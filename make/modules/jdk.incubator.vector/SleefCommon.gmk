@@ -89,11 +89,17 @@ endef
 SetupSleefHeader = $(NamedParamsMacroTemplate)
 define SetupSleefHeaderBody
   UP := $$(call uppercase,$1)
+  ifeq ($$($1_HELPER_SUFFIX), )
+    HS := $1
+  else
+    HS := $$($1_HELPER_SUFFIX)
+  endif
   $$(eval $$(call SetupSleefIntermediate, rename$1.h, \
       BLD_DEPS := mkrename, \
       COMMAND := $$(SLEEF_BLD)/mkrename "finz_" "$$($1_DP)" "$$($1_SP)" "$1"))
   $$(eval $$(call SetupSleefIntermediate, sleefsimddp$$(UP).h.tmp, \
-      SRC_DEPS := libm/sleefsimddp.c $$(SLEEF_COMMON_DEPS) arch/helper$1.h, \
+      SRC_DEPS := libm/sleefsimddp.c $$(SLEEF_COMMON_DEPS) \
+                  arch/helper$$(HS).h, \
       BLD_DEPS := rename$1.h, \
       COMMAND := $$(CPP) -C $$(SLEEF_CPP_CFLAGS_COMMON) -DENABLE_$$(UP) \
                          $$($1_CPP_FLAGS_EXTRA) \
@@ -152,4 +158,12 @@ ifeq ($(call isTargetOs, linux)+$(call isTargetCpu, aarch64)+$(INCLUDE_COMPILER2
   $(eval $(call SetupSleefHeader, advsimd, \
      DP := 2, \
      SP := 4))
+endif
+
+ifeq ($(call isTargetOs, linux)+$(call isTargetCpu, riscv64)+$(INCLUDE_COMPILER2), true+true+true)
+  # sleefinline_rvvm1.h
+  $(eval $(call SetupSleefHeader, rvvm1, \
+     DP := x, \
+     SP := x, \
+     HELPER_SUFFIX := rvv))
 endif
