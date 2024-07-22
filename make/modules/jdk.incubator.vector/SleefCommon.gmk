@@ -25,15 +25,21 @@
 
 include Execute.gmk
 include NativeCompilation.gmk
+include Utils.gmk
 
 MODULE = jdk.incubator.vector
 NATIVE = $(TOPDIR)/src/$(MODULE)/$(OPENJDK_TARGET_OS)/native
 VECTORMATH_SRC := $(NATIVE)/libvectormath
 SLEEF_SRC := $(NATIVE)/sleef/src
 SLEEF_BLD := $(SUPPORT_OUTPUTDIR)/native/$(MODULE)
-SLEEF_CPP_CFLAGS_SVE := -march=armv8-a+sve -fno-tree-vrp
 SLEEF_CPP_CFLAGS_COMMON := -I$(SLEEF_SRC)/common -I$(SLEEF_SRC)/arch \
                            -I$(SLEEF_BLD) -DSLEEF_GENHEADER -DDORENAME
+SLEEF_COMMON_DEPS := common/commonfuncs.h \
+                     common/dd.h \
+                     common/df.h \
+                     common/estrin.h \
+                     common/misc.h \
+                     common/quaddef.h
 
 SetupSleefHelperExecutable = $(NamedParamsMacroTemplate)
 define SetupSleefHelperExecutableBody
@@ -43,6 +49,7 @@ define SetupSleefHelperExecutableBody
       TYPE := EXECUTABLE, \
       TARGET_TYPE := BUILD, \
       EXTRA_FILES := $$(SLEEF_SRC)/$1, \
+      EXTRA_DEPS := $$(SLEEF_SRC)/libm/funcproto.h, \
       OBJECT_DIR := $$(SLEEF_BLD)/$$(EXECUTABLE)-build, \
       OUTPUT_DIR := $$(SLEEF_BLD)))
   SLEEF_TARGETS += $$(SLEEF_BUILD_$$(EXECUTABLE))
@@ -79,106 +86,70 @@ define SetupSleefOverwriteBody
   endif
 endef
 
-# sleefinline_sve.h
-$(eval $(call SetupSleefIntermediate, renamesve.h, \
-    BLD_DEPS := mkrename, \
-    COMMAND := $(SLEEF_BLD)/mkrename "finz_" "x" "x" "sve"))
-$(eval $(call SetupSleefIntermediate, sleefsimddpSVE.h.tmp, \
-    SRC_DEPS := libm/sleefsimddp.c, \
-    BLD_DEPS := renamesve.h, \
-    COMMAND := $(CPP) -C $(SLEEF_CPP_CFLAGS_COMMON) -DENABLE_SVE \
-                      $(SLEEF_CPP_CFLAGS_SVE) \
-                      $(SLEEF_SRC)/libm/sleefsimddp.c))
-$(eval $(call SetupSleefIntermediate, macroonlySVE.h, \
-    BLD_DEPS := sleefsimddpSVE.h.tmp, \
-    COMMAND := $(SED) -e "/^\\/\\/@\#.*\$$/!d" \
-                      -e "s/^\\/\\/@\#/\#/g" \
-                      $(SLEEF_BLD)/sleefsimddpSVE.h.tmp))
-$(eval $(call SetupSleefIntermediate, sleefsimdspSVE.h.tmp, \
-    SRC_DEPS := libm/sleefsimdsp.c, \
-    BLD_DEPS := macroonlySVE.h, \
-    COMMAND := $(CPP) -C $(SLEEF_CPP_CFLAGS_COMMON) -DENABLE_SVE \
-                      $(SLEEF_CPP_CFLAGS_SVE) \
-                      $(SLEEF_SRC)/libm/sleefsimdsp.c))
-$(eval $(call SetupSleefIntermediate, sleefSVE.h.c, \
-    BLD_DEPS := sleefsimddpSVE.h.tmp sleefsimdspSVE.h.tmp, \
-    COMMAND := $(CAT) $(SLEEF_BLD)/sleefsimddpSVE.h.tmp \
-                      $(SLEEF_BLD)/sleefsimdspSVE.h.tmp \
-               | $(SED) -e "s/^\#.*//g"))
-$(eval $(call SetupSleefIntermediate, sleefSVE.h.tmp3, \
-    BLD_DEPS := sleefSVE.h.c, \
-    COMMAND := $(CPP) $(SLEEF_BLD)/sleefSVE.h.c \
-               | $(SED) -e "s/^\#.*//g"))
-$(eval $(call SetupSleefIntermediate, sleefSVE.h.tmp4, \
-    SRC_DEPS := libm/sleefinline_header.h.org, \
-    BLD_DEPS := sleefSVE.h.tmp3, \
-    COMMAND := $(CAT) $(SLEEF_SRC)/libm/sleefinline_header.h.org \
-                      $(SLEEF_BLD)/sleefSVE.h.tmp3 \
-               | $(SED) -e "s/SLEEF_VERSION_SLEEF/3.6.1/g" \
-                        -e "s/SLEEF_SIMD_SLEEF/SVE/g" \
-                        -e "s/^SLEEFSHARP/\#/g" \
-                        -e "s/SLEEFXXX//g" \
-                        -e "s/^[[:space:]]*\$$//g"))
-$(eval $(call SetupSleefIntermediate, sleefSVE.h.tmp5, \
-    BLD_DEPS := sleefSVE.h.tmp4, \
-    COMMAND := $(SED) -e "/^\$$/N" -e "/^\\n\$$/D" \
-               $(SLEEF_BLD)/sleefSVE.h.tmp4))
-$(eval $(call SetupSleefIntermediate, sleefinline_sve.h, \
-    SRC_DEPS := common/keywords.txt, \
-    BLD_DEPS := sleefSVE.h.tmp5 addSuffix, \
-    COMMAND := $(SLEEF_BLD)/addSuffix $(SLEEF_BLD)/sleefSVE.h.tmp5 \
-                                      $(SLEEF_SRC)/common/keywords.txt \
-                                      _sve_sleef \
-                                      Sleef_rempitabdp Sleef_rempitabsp))
-$(eval $(call SetupSleefOverwrite, sleefinline_sve.h))
+SetupSleefHeader = $(NamedParamsMacroTemplate)
+define SetupSleefHeaderBody
+  UP := $$(call uppercase,$1)
+  $$(eval $$(call SetupSleefIntermediate, rename$1.h, \
+      BLD_DEPS := mkrename, \
+      COMMAND := $$(SLEEF_BLD)/mkrename "finz_" "$$($1_DP)" "$$($1_SP)" "$1"))
+  $$(eval $$(call SetupSleefIntermediate, sleefsimddp$$(UP).h.tmp, \
+      SRC_DEPS := libm/sleefsimddp.c $$(SLEEF_COMMON_DEPS) arch/helper$1.h, \
+      BLD_DEPS := rename$1.h, \
+      COMMAND := $$(CPP) -C $$(SLEEF_CPP_CFLAGS_COMMON) -DENABLE_$$(UP) \
+                         $$($1_CPP_FLAGS_EXTRA) \
+                         $$(SLEEF_SRC)/libm/sleefsimddp.c))
+  $$(eval $$(call SetupSleefIntermediate, macroonly$$(UP).h, \
+      BLD_DEPS := sleefsimddp$$(UP).h.tmp, \
+      COMMAND := $$(SED) -e "/^\\/\\/@\#.*\$$$$/!d" \
+                         -e "s/^\\/\\/@\#/\#/g" \
+                         $$(SLEEF_BLD)/sleefsimddp$$(UP).h.tmp))
+  $$(eval $$(call SetupSleefIntermediate, sleefsimdsp$$(UP).h.tmp, \
+      SRC_DEPS := libm/sleefsimdsp.c $$(SLEEF_COMMON_DEPS), \
+      BLD_DEPS := macroonly$$(UP).h, \
+      COMMAND := $$(CPP) -C $$(SLEEF_CPP_CFLAGS_COMMON) -DENABLE_$$(UP) \
+                         $$($1_CPP_FLAGS_EXTRA) \
+                         $$(SLEEF_SRC)/libm/sleefsimdsp.c))
+  $$(eval $$(call SetupSleefIntermediate, sleef$$(UP).h.c, \
+      BLD_DEPS := sleefsimddp$$(UP).h.tmp sleefsimdsp$$(UP).h.tmp, \
+      COMMAND := $$(CAT) $$(SLEEF_BLD)/sleefsimddp$$(UP).h.tmp \
+                         $$(SLEEF_BLD)/sleefsimdsp$$(UP).h.tmp \
+                 | $$(SED) -e "s/^\#.*//g"))
+  $$(eval $$(call SetupSleefIntermediate, sleef$$(UP).h.tmp3, \
+      BLD_DEPS := sleef$$(UP).h.c, \
+      COMMAND := $$(CPP) $$(SLEEF_BLD)/sleef$$(UP).h.c \
+                 | $$(SED) -e "s/^\#.*//g"))
+  $$(eval $$(call SetupSleefIntermediate, sleef$$(UP).h.tmp4, \
+      SRC_DEPS := libm/sleefinline_header.h.org, \
+      BLD_DEPS := sleef$$(UP).h.tmp3, \
+      COMMAND := $$(CAT) $$(SLEEF_SRC)/libm/sleefinline_header.h.org \
+                         $$(SLEEF_BLD)/sleef$$(UP).h.tmp3 \
+                 | $$(SED) -e "s/SLEEF_VERSION_SLEEF/3.6.1/g" \
+                           -e "s/SLEEF_SIMD_SLEEF/$$(UP)/g" \
+                           -e "s/^SLEEFSHARP/\#/g" \
+                           -e "s/SLEEFXXX//g" \
+                           -e "s/^[[:space:]]*\$$$$//g"))
+  $$(eval $$(call SetupSleefIntermediate, sleef$$(UP).h.tmp5, \
+      BLD_DEPS := sleef$$(UP).h.tmp4, \
+      COMMAND := $$(SED) -e "/^\$$$$/N" -e "/^\\n\$$$$/D" \
+                 $$(SLEEF_BLD)/sleef$$(UP).h.tmp4))
+  $$(eval $$(call SetupSleefIntermediate, sleefinline_$1.h, \
+      SRC_DEPS := common/keywords.txt, \
+      BLD_DEPS := sleef$$(UP).h.tmp5 addSuffix, \
+      COMMAND := $$(SLEEF_BLD)/addSuffix $$(SLEEF_BLD)/sleef$$(UP).h.tmp5 \
+                                         $$(SLEEF_SRC)/common/keywords.txt \
+                                         _$1_sleef \
+                                         Sleef_rempitabdp Sleef_rempitabsp))
+  $$(eval $$(call SetupSleefOverwrite, sleefinline_$1.h))
+endef
 
-# sleefinline_advsimd.h
-$(eval $(call SetupSleefIntermediate, renameadvsimd.h, \
-    BLD_DEPS := mkrename, \
-    COMMAND := $(SLEEF_BLD)/mkrename "finz_" "2" "4" "advsimd"))
-$(eval $(call SetupSleefIntermediate, sleefsimddpADVSIMD.h.tmp, \
-    SRC_DEPS := libm/sleefsimddp.c, \
-    BLD_DEPS := renameadvsimd.h, \
-    COMMAND := $(CPP) -C $(SLEEF_CPP_CFLAGS_COMMON) -DENABLE_ADVSIMD \
-                      $(SLEEF_SRC)/libm/sleefsimddp.c))
-$(eval $(call SetupSleefIntermediate, macroonlyADVSIMD.h, \
-    BLD_DEPS := sleefsimddpADVSIMD.h.tmp, \
-    COMMAND := $(SED) -e "/^\\/\\/@\#.*\$$/!d" \
-                      -e "s/^\\/\\/@\#/\#/g" \
-                      $(SLEEF_BLD)/sleefsimddpADVSIMD.h.tmp))
-$(eval $(call SetupSleefIntermediate, sleefsimdspADVSIMD.h.tmp, \
-    SRC_DEPS := libm/sleefsimdsp.c, \
-    BLD_DEPS := macroonlyADVSIMD.h, \
-    COMMAND := $(CPP) -C $(SLEEF_CPP_CFLAGS_COMMON) -DENABLE_ADVSIMD \
-                      $(SLEEF_SRC)/libm/sleefsimdsp.c))
-$(eval $(call SetupSleefIntermediate, sleefADVSIMD.h.c, \
-    BLD_DEPS := sleefsimddpADVSIMD.h.tmp sleefsimdspADVSIMD.h.tmp, \
-    COMMAND := $(CAT) $(SLEEF_BLD)/sleefsimddpADVSIMD.h.tmp \
-                      $(SLEEF_BLD)/sleefsimdspADVSIMD.h.tmp \
-               | $(SED) -e "s/^\#.*//g"))
-$(eval $(call SetupSleefIntermediate, sleefADVSIMD.h.tmp3, \
-    BLD_DEPS := sleefADVSIMD.h.c, \
-    COMMAND := $(CPP) $(SLEEF_BLD)/sleefADVSIMD.h.c \
-               | $(SED) -e "s/^\#.*//g"))
-$(eval $(call SetupSleefIntermediate, sleefADVSIMD.h.tmp4, \
-    SRC_DEPS := libm/sleefinline_header.h.org, \
-    BLD_DEPS := sleefADVSIMD.h.tmp3, \
-    COMMAND := $(CAT) $(SLEEF_SRC)/libm/sleefinline_header.h.org \
-                      $(SLEEF_BLD)/sleefADVSIMD.h.tmp3 \
-               | $(SED) -e "s/SLEEF_VERSION_SLEEF/3.6.1/g" \
-                        -e "s/SLEEF_SIMD_SLEEF/ADVSIMD/g" \
-                        -e "s/^SLEEFSHARP/\#/g" \
-                        -e "s/SLEEFXXX//g" \
-                        -e "s/^[[:space:]]*\$$//g"))
-$(eval $(call SetupSleefIntermediate, sleefADVSIMD.h.tmp5, \
-    BLD_DEPS := sleefADVSIMD.h.tmp4, \
-    COMMAND := $(SED) -e "/^\$$/N" -e "/^\\n\$$/D" \
-               $(SLEEF_BLD)/sleefADVSIMD.h.tmp4))
-$(eval $(call SetupSleefIntermediate, sleefinline_advsimd.h, \
-    SRC_DEPS := common/keywords.txt, \
-    BLD_DEPS := sleefADVSIMD.h.tmp5 addSuffix, \
-    COMMAND := $(SLEEF_BLD)/addSuffix $(SLEEF_BLD)/sleefADVSIMD.h.tmp5 \
-                                      $(SLEEF_SRC)/common/keywords.txt \
-                                      _advsimd_sleef \
-                                      Sleef_rempitabdp Sleef_rempitabsp))
-$(eval $(call SetupSleefOverwrite, sleefinline_advsimd.h))
+ifeq ($(call isTargetOs, linux)+$(call isTargetCpu, aarch64)+$(INCLUDE_COMPILER2), true+true+true)
+  # sleefinline_sve.h
+  $(eval $(call SetupSleefHeader, sve, \
+     DP := x, \
+     SP := x, \
+     CPP_FLAGS_EXTRA := -march=armv8-a+sve -fno-tree-vrp))
+  # sleefinline_advsimd.h
+  $(eval $(call SetupSleefHeader, advsimd, \
+     DP := 2, \
+     SP := 4))
+endif
